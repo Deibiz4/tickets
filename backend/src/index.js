@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const { createServer } = require('http');
 const { errorHandler } = require('./middleware/errorHandler');
 const { connectDB } = require('./config/db');
+const logger = require('./utils/logger');
 
 // Importar rutas
 const authRoutes = require('./routes/auth');
@@ -43,6 +44,12 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Custom Logger Middleware
+app.use((req, res, next) => {
+  logger.info(`Request: ${req.method} ${req.url} - IP: ${req.ip}`);
+  next();
+});
+
 // Passport Config
 const passport = require('./config/passport');
 app.use(passport.initialize());
@@ -57,6 +64,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/departments', require('./routes/departments'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/stats', require('./routes/stats'));
+app.use('/api/kb', require('./routes/kb'));
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Content-Disposition', 'attachment');
   next();

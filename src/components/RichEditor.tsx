@@ -8,21 +8,22 @@ interface RichEditorProps {
     disabled?: boolean;
 }
 
-export function RichEditor({ value, onChange, placeholder, disabled }: RichEditorProps) {
-    const modules = {
-        toolbar: [
-            ['bold', 'italic', 'underline', 'strike'],
-            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-            ['link', 'code-block'],
-            ['clean']
-        ],
-    };
+const modules = {
+    toolbar: [
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+        ['link', 'code-block'],
+        ['clean']
+    ],
+};
 
-    const formats = [
-        'bold', 'italic', 'underline', 'strike',
-        'list', 'bullet',
-        'link', 'code-block'
-    ];
+const formats = [
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet',
+    'link', 'code-block'
+];
+
+export function RichEditor({ value, onChange, placeholder, disabled }: RichEditorProps) {
 
     return (
         <div className="rich-editor-container">

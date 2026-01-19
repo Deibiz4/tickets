@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { API_ENDPOINTS } from '@/config/api';
+import { BookOpen } from 'lucide-react';
 import { TicketConversation } from '@/components/TicketConversation';
 import { RichEditor } from '@/components/RichEditor';
 
@@ -23,6 +24,7 @@ export function TicketForm() {
         status: 'open'
     });
     const [file, setFile] = useState<File | null>(null);
+    const [suggestedArticles, setSuggestedArticles] = useState<any[]>([]);
 
     useEffect(() => {
         if (isEditing) {
@@ -53,6 +55,31 @@ export function TicketForm() {
             fetchTicket();
         }
     }, [id, isEditing]);
+
+    useEffect(() => {
+        const searchKB = async () => {
+            if (!formData.title || formData.title.length < 3) {
+                setSuggestedArticles([]);
+                return;
+            }
+
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch(`${API_ENDPOINTS.KB.ARTICLES}?search=${encodeURIComponent(formData.title)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const articles = await response.json();
+                    setSuggestedArticles(articles.slice(0, 3));
+                }
+            } catch (error) {
+                console.error("Error searching KB:", error);
+            }
+        };
+
+        const timeoutId = setTimeout(searchKB, 500);
+        return () => clearTimeout(timeoutId);
+    }, [formData.title]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -94,7 +121,15 @@ export function TicketForm() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.msg || errorData.message || 'Error al guardar el ticket');
+
+                let errorMessage = errorData.msg || errorData.message || 'Error al guardar el ticket';
+
+                if (errorData.errors && Array.isArray(errorData.errors)) {
+                    const validationMessages = errorData.errors.map((e: any) => `${e.field}: ${e.message}`);
+                    errorMessage += '\n' + validationMessages.join('\n');
+                }
+
+                throw new Error(errorMessage);
             }
 
             navigate('/dashboard/tickets');
@@ -132,7 +167,12 @@ export function TicketForm() {
             <form onSubmit={handleSubmit} className="space-y-6 bg-white shadow sm:rounded-lg p-6">
                 {error && (
                     <div className="bg-red-50 p-4 rounded-md text-red-700 text-sm">
-                        {error}
+                        <p className="font-bold">Error:</p>
+                        <ul className="list-disc list-inside">
+                            {error.split('\n').map((err, index) => (
+                                <li key={index}>{err}</li>
+                            ))}
+                        </ul>
                     </div>
                 )}
 
@@ -141,12 +181,36 @@ export function TicketForm() {
                     <Input
                         id="title"
                         value={formData.title}
-                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, title: e.target.value })}
                         required
                         placeholder="Resumen del problema"
                         disabled={isEditing}
                     />
                 </div>
+
+                {suggestedArticles.length > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-4 space-y-2">
+                        <h4 className="text-sm font-semibold text-blue-800 flex items-center gap-2">
+                            <BookOpen className="h-4 w-4" />
+                            Artículos relacionados:
+                        </h4>
+                        <ul className="text-sm space-y-1">
+                            {suggestedArticles.map(article => (
+                                <li key={article.id}>
+                                    <a
+                                        href={`/dashboard/kb/${article.id}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-blue-600 hover:underline flex items-center gap-1"
+                                    >
+                                        {article.title}
+                                        <span className="text-xs text-gray-500">({article.category_name})</span>
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
 
                 <div className="space-y-2">
                     <Label htmlFor="description">Descripción</Label>
@@ -166,7 +230,7 @@ export function TicketForm() {
                         <Input
                             id="file"
                             type="file"
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                 if (e.target.files && e.target.files[0]) {
                                     setFile(e.target.files[0]);
                                 }
@@ -186,7 +250,7 @@ export function TicketForm() {
                             id="priority"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                             value={formData.priority}
-                            onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, priority: e.target.value })}
                         >
                             <option value="low">Baja</option>
                             <option value="medium">Media</option>
@@ -202,7 +266,7 @@ export function TicketForm() {
                                 id="status"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                 value={formData.status}
-                                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, status: e.target.value })}
                             >
                                 <option value="open">Abierto</option>
                                 <option value="in_progress">En Progreso</option>

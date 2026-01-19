@@ -75,9 +75,13 @@ exports.addComment = async (req, res) => {
         // Si el autor es Admin/Agente -> Notificar al Dueño del Ticket
         const { sendNewCommentNotification } = require('../services/email.service');
         const User = require('../models/user.model');
+        const NotificationModel = require('../models/notification.model');
 
         (async () => {
             try {
+                const isEnabled = await NotificationModel.isEnabled('new_comment');
+                if (!isEnabled) return;
+
                 let recipientEmail = null;
 
                 if (req.user.role === 'user') {
@@ -85,8 +89,6 @@ exports.addComment = async (req, res) => {
                     if (ticket.assigned_to) {
                         const agent = await User.findById(ticket.assigned_to);
                         recipientEmail = agent ? agent.email : null;
-                    } else {
-                        // Si no está asignado, podría notificar a todos los admins (opcional, aquí no lo hacemos para no spammear)
                     }
                 } else {
                     // Es admin o agente -> Notificar al usuario creador
@@ -94,11 +96,19 @@ exports.addComment = async (req, res) => {
                     recipientEmail = creator ? creator.email : null;
                 }
 
-                if (recipientEmail) {
+                // [MODIFIED] Agregar al remitente a la lista de notificaciones (CC)
+                // Usamos un Set para evitar duplicados si el remitente es el mismo que el destinatario
+                const recipients = new Set();
+                if (recipientEmail) recipients.add(recipientEmail);
+                if (req.user.email) recipients.add(req.user.email);
+
+                const finalRecipients = Array.from(recipients).join(', ');
+
+                if (finalRecipients) {
                     await sendNewCommentNotification(ticket, {
                         username: req.user.username,
                         content: content || 'Archivo adjunto'
-                    }, recipientEmail);
+                    }, finalRecipients);
                 }
             } catch (notifyErr) {
                 console.error('Error sending comment notification:', notifyErr);

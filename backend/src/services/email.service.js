@@ -21,7 +21,7 @@ const sendEmail = async ({ to, subject, html }) => {
             subject,
             html,
         });
-        console.log('Message sent: %s', info.messageId);
+        console.log('Message sent to %s: %s', to, info.messageId);
         return info;
     } catch (error) {
         console.error('Error sending email:', error);
@@ -61,7 +61,7 @@ const sendNewTicketNotification = async (ticket, adminEmails) => {
     <p><strong>Descripción:</strong></p>
     <p>${ticket.description}</p>
     <br>
-    <a href="${process.env.FRONTEND_URL || 'http://localhost:5175'}/dashboard/tickets/${ticket.id}">Ver Ticket</a>
+    <a href="${process.env.FRONTEND_URL || 'http://192.168.200.176:5175'}/dashboard/tickets/${ticket.id}">Ver Ticket</a>
   `;
 
     // Enviar a lista de admins/agentes
@@ -84,7 +84,7 @@ const sendNewCommentNotification = async (ticket, comment, recipientEmail) => {
         ${comment.content}
     </div>
     <br>
-    <a href="${process.env.FRONTEND_URL || 'http://localhost:5175'}/dashboard/tickets/${ticket.id}">Ver Ticket</a>
+    <a href="${process.env.FRONTEND_URL || 'http://192.168.200.176:5175'}/dashboard/tickets/${ticket.id}">Ver Ticket</a>
   `;
 
     if (recipientEmail) {
@@ -117,7 +117,7 @@ const sendTicketUpdateNotification = async (ticket, changes, recipientEmails) =>
     ${changesHtml}
     <br>
     <p>Puede ver los detalles completos aquí:</p>
-    <a href="${process.env.FRONTEND_URL || 'http://localhost:5175'}/dashboard/tickets/${ticket.id}">Ver Ticket</a>
+    <a href="${process.env.FRONTEND_URL || 'http://192.168.200.176:5175'}/dashboard/tickets/${ticket.id}">Ver Ticket</a>
   `;
 
     // Ensure recipientEmails is an array or handled correctly if string

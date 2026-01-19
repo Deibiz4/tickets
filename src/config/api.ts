@@ -1,3 +1,4 @@
+
 // Configuración de la API
 export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -17,5 +18,16 @@ export const API_ENDPOINTS = {
   },
   DEPARTMENTS: {
     BASE: `${API_BASE_URL}/departments`,
+  },
+  NOTIFICATIONS: {
+    SETTINGS: `${API_BASE_URL}/notifications/settings`,
+    UPDATE: (eventType: string) => `${API_BASE_URL}/notifications/settings/${eventType}`,
+  },
+  STATS: {
+    BASE: `${API_BASE_URL}/stats`,
+  },
+  KB: {
+    ARTICLES: `${API_BASE_URL}/kb/articles`,
+    CATEGORIES: `${API_BASE_URL}/kb/categories`,
   },
 };

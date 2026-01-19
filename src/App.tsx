@@ -13,7 +13,8 @@ import { TicketForm } from '@/pages/TicketForm';
 import { History } from '@/pages/History';
 import { Users } from '@/pages/Users';
 import { UserForm } from '@/pages/UserForm';
-import { Settings } from '@/pages/Settings';
+import { Settings } from '@/pages/SettingsPage';
+import { DashboardStats } from '@/pages/DashboardStats';
 
 // Componente de ruta protegida
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -67,6 +68,7 @@ const AppRoutes = () => {
         <Route path="users/:id" element={<UserForm />} />
 
         <Route path="settings" element={<Settings />} />
+        <Route path="stats" element={<DashboardStats />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

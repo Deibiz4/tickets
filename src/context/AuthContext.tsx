@@ -13,6 +13,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -130,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = {
     user,
+    token: localStorage.getItem('token'),
     isAuthenticated: !!user,
     isLoading,
     login,

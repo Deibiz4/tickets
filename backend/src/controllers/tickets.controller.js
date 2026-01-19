@@ -1,6 +1,7 @@
 const Ticket = require('../models/ticket.model');
 const Attachment = require('../models/attachment.model');
 const Comment = require('../models/comment.model');
+const logger = require('../utils/logger');
 
 // @desc    Obtener todos los tickets
 // @route   GET /api/tickets
@@ -9,12 +10,26 @@ exports.getTickets = async (req, res, next) => {
 
   try {
     const userId = req.user.role === 'user' ? req.user.id : null;
-    const tickets = await Ticket.find(userId);
+
+    // Extract query parameters for filtering and sorting
+    const filters = {
+      userId,
+      priority: req.query.priority,
+      status: req.query.status,
+      department: req.query.department,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder,
+      search: req.query.search
+    };
+
+    const tickets = await Ticket.find(filters);
 
     res.json(tickets);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Error del servidor');
+    logger.error(`Error in getTickets: ${err.stack}`);
+    res.status(500).json({ msg: 'Error del servidor' });
   }
 };
 
@@ -31,8 +46,8 @@ exports.getTicketById = async (req, res, next) => {
 
     res.json(ticket);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Error del servidor');
+    logger.error(`Error in getTicketById: ${err.stack}`);
+    res.status(500).json({ msg: 'Error del servidor' });
   }
 };
 
@@ -86,6 +101,10 @@ exports.createTicket = async (req, res, next) => {
       try {
         const { sendNewTicketNotification } = require('../services/email.service');
         const User = require('../models/user.model');
+        const NotificationModel = require('../models/notification.model');
+
+        const isEnabled = await NotificationModel.isEnabled('new_ticket');
+        if (!isEnabled) return;
 
         const users = await User.getAllUsers();
         // Obtener el usuario actual para tener el username correcto
@@ -107,10 +126,10 @@ exports.createTicket = async (req, res, next) => {
     })();
   } catch (err) {
     if (!res.headersSent) {
-      console.error(err.message);
-      res.status(500).send('Error del servidor');
+      logger.error(`Error in createTicket: ${err.stack}`);
+      res.status(500).json({ msg: 'Error del servidor' });
     } else {
-      console.error('Error after headers sent:', err.message);
+      logger.error(`Error after headers sent in createTicket: ${err.message}`);
     }
   }
 };
@@ -150,6 +169,10 @@ exports.updateTicket = async (req, res, next) => {
       try {
         const { sendTicketUpdateNotification } = require('../services/email.service');
         const User = require('../models/user.model');
+        const NotificationModel = require('../models/notification.model');
+
+        const isEnabled = await NotificationModel.isEnabled('ticket_update');
+        if (!isEnabled) return;
 
         const changes = {};
         if (title && title !== ticket.title) changes.title = { old: ticket.title, new: title }; // Usually not notified but useful
@@ -181,6 +204,9 @@ exports.updateTicket = async (req, res, next) => {
           }
 
           // NOTA: Se permiten notificaciones al propio actor para confirmar cambios.
+          if (req.user.email) {
+            recipients.add(req.user.email);
+          }
 
           if (recipients.size > 0) {
             await sendTicketUpdateNotification(updatedTicket, changes, Array.from(recipients));
@@ -191,8 +217,8 @@ exports.updateTicket = async (req, res, next) => {
       }
     })();
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Error del servidor');
+    logger.error(`Error in updateTicket: ${err.stack}`);
+    res.status(500).json({ msg: 'Error del servidor' });
   }
 };
 
@@ -215,7 +241,7 @@ exports.deleteTicket = async (req, res, next) => {
     await Ticket.delete(req.params.id);
     res.json({ msg: 'Ticket eliminado' });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Error del servidor');
+    logger.error(`Error in deleteTicket: ${err.stack}`);
+    res.status(500).json({ msg: 'Error del servidor' });
   }
 };

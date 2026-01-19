@@ -19,8 +19,21 @@ class Ticket {
     }
   }
 
-  static async find(userId = null) {
-    console.log('TicketModel: Find start', userId ? `Filtering by user ${userId}` : 'All tickets');
+  static async find(filters = {}) {
+    const {
+      userId,
+      priority,
+      status,
+      department,
+      startDate,
+      endDate,
+      sortBy = 'created_at',
+      sortOrder = 'DESC',
+      search
+    } = filters;
+
+    console.log('TicketModel: Find start', filters);
+
     try {
       let queryText = `SELECT t.*, 
                 u.username as creator_username, 
@@ -30,13 +43,59 @@ class Ticket {
          JOIN tickets.users u ON t.created_by = u.id`;
 
       const values = [];
+      const conditions = [];
 
+      // User filter (for non-admins usually)
       if (userId) {
-        queryText += ` WHERE t.created_by = $1`;
+        conditions.push(`t.created_by = $${values.length + 1}`);
         values.push(userId);
       }
 
-      queryText += ` ORDER BY t.created_at DESC`;
+      // Priority filter
+      if (priority) {
+        conditions.push(`t.priority = $${values.length + 1}`);
+        values.push(priority);
+      }
+
+      // Status filter
+      if (status) {
+        conditions.push(`t.status = $${values.length + 1}`);
+        values.push(status);
+      }
+
+      // Department filter
+      if (department) {
+        conditions.push(`u.department = $${values.length + 1}`);
+        values.push(department);
+      }
+
+      // Date range filter
+      if (startDate) {
+        conditions.push(`t.created_at >= $${values.length + 1}`);
+        values.push(startDate);
+      }
+      if (endDate) {
+        // Add one day to include the end date fully if it's just a date string, or assume valid timestamp
+        conditions.push(`t.created_at <= $${values.length + 1}`);
+        values.push(endDate);
+      }
+
+      // Search
+      if (search) {
+        conditions.push(`(t.title ILIKE $${values.length + 1} OR t.description ILIKE $${values.length + 1})`);
+        values.push(`%${search}%`);
+      }
+
+      if (conditions.length > 0) {
+        queryText += ` WHERE ${conditions.join(' AND ')}`;
+      }
+
+      // Sorting
+      const allowedSortColumns = ['id', 'title', 'priority', 'status', 'created_at', 'updated_at'];
+      const sortColumn = allowedSortColumns.includes(sortBy) ? `t.${sortBy}` : 't.created_at';
+      const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+      queryText += ` ORDER BY ${sortColumn} ${order}`;
 
       const result = await query(queryText, values);
       console.log('TicketModel: Find success', result.rows.length);

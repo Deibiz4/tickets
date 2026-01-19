@@ -61,6 +61,26 @@ export function DashboardHome() {
         }
     };
 
+    const getPriorityColor = (priority: string) => {
+        switch (priority) {
+            case 'high': return 'text-red-600 font-bold bg-red-50';
+            case 'critical': return 'text-red-800 font-extrabold bg-red-100';
+            case 'medium': return 'text-yellow-600 font-medium bg-yellow-50';
+            case 'low': return 'text-blue-600 bg-blue-50';
+            default: return 'text-gray-600 bg-gray-50';
+        }
+    };
+
+    const getPriorityLabel = (priority: string) => {
+        switch (priority) {
+            case 'low': return 'Baja';
+            case 'medium': return 'Media';
+            case 'high': return 'Alta';
+            case 'critical': return 'Crítica';
+            default: return priority;
+        }
+    };
+
     return (
         <div className="bg-gray-50/50 p-6">
             <h2 className="text-2xl font-bold mb-6 text-gray-900">Panel de Control</h2>
@@ -102,6 +122,9 @@ export function DashboardHome() {
                                                 <div className="ml-2 flex-shrink-0 flex">
                                                     <p className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
                                                         {getStatusLabel(ticket.status)}
+                                                    </p>
+                                                    <p className={`ml-2 px-2 inline-flex text-xs leading-5 rounded-full ${getPriorityColor(ticket.priority)}`}>
+                                                        {getPriorityLabel(ticket.priority)}
                                                     </p>
                                                 </div>
                                             </div>

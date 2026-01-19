@@ -3,6 +3,7 @@ import { Link, Outlet } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { GlobalSearch } from '@/components/GlobalSearch';
+import { TrendingUp, BookOpen } from 'lucide-react';
 
 export function Dashboard() {
   const { user, logout } = useAuth();
@@ -138,6 +139,24 @@ export function Dashboard() {
                   Usuarios
                 </Link>
               )}
+
+              {(user?.role === 'admin' || user?.role === 'agent') && (
+                <Link
+                  to="/dashboard/stats"
+                  className="mt-1 group flex items-center px-2 py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                >
+                  <TrendingUp className="mr-3 h-6 w-6 text-gray-400 group-hover:text-gray-500" />
+                  Estadísticas
+                </Link>
+              )}
+
+              <Link
+                to="/dashboard/kb"
+                className="mt-1 group flex items-center px-2 py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              >
+                <BookOpen className="mr-3 h-6 w-6 text-gray-400 group-hover:text-gray-500" />
+                Base de Conocimiento
+              </Link>
               <Link
                 to="/dashboard/settings"
                 className="mt-1 group flex items-center px-2 py-2 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"

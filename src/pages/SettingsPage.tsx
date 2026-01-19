@@ -1,14 +1,124 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { API_ENDPOINTS } from '@/config/api';
+
+interface NotificationSetting {
+    id: number;
+    event_type: string;
+    enabled: boolean;
+    recipients_role: string;
+    description: string;
+    updated_at: string;
+}
+
+interface SettingsFormData {
+    fullName: string;
+    email: string;
+    currentPassword?: string;
+    newPassword?: string;
+    confirmPassword?: string;
+}
+
+function NotificationSettingsPanel() {
+    const [settings, setSettings] = useState<NotificationSetting[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        const checkAdmin = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            fetchSettings();
+        };
+        checkAdmin();
+    }, []);
+
+    const fetchSettings = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(API_ENDPOINTS.NOTIFICATIONS.SETTINGS, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setSettings(data);
+                setIsAdmin(true);
+            } else {
+                if (response.status === 403 || response.status === 401) {
+                    setIsAdmin(false);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching settings', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleToggle = async (eventType: string, currentEnabled: boolean) => {
+        // Optimistic update
+        setSettings((prev: NotificationSetting[]) => prev.map((s: NotificationSetting) => s.event_type === eventType ? { ...s, enabled: !currentEnabled } : s));
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(API_ENDPOINTS.NOTIFICATIONS.UPDATE(eventType), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ enabled: !currentEnabled })
+            });
+
+            if (!response.ok) {
+                // Revert
+                setSettings((prev: NotificationSetting[]) => prev.map((s: NotificationSetting) => s.event_type === eventType ? { ...s, enabled: currentEnabled } : s));
+            }
+        } catch (error) {
+            // Revert
+            setSettings((prev: NotificationSetting[]) => prev.map((s: NotificationSetting) => s.event_type === eventType ? { ...s, enabled: currentEnabled } : s));
+        }
+    };
+
+    if (!isAdmin) return null;
+
+    if (loading) return <div className="mt-8">Cargando configuraciones...</div>;
+
+    return (
+        <div className="mt-8 mb-8 bg-white shadow sm:rounded-lg p-6">
+            <div className="mb-6">
+                <h2 className="text-lg font-medium text-gray-900 border-b pb-2">Configuración de Notificaciones (Admin)</h2>
+                <p className="text-xs text-gray-500 mt-1">Controla qué eventos envían correos electrónicos.</p>
+            </div>
+
+            <div className="space-y-6">
+                {settings.map((setting) => (
+                    <div key={setting.event_type} className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label className="text-base">{setting.description || setting.event_type}</Label>
+                            <p className="text-sm text-gray-500">
+                                {setting.recipients_role === 'all' ? 'Se notifica a todos los involucrados' : `Se notifica a: ${setting.recipients_role}`}
+                            </p>
+                        </div>
+                        <Switch
+                            checked={setting.enabled}
+                            onCheckedChange={() => handleToggle(setting.event_type, setting.enabled)}
+                        />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 export function Settings() {
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<SettingsFormData>({
         fullName: '',
         email: '',
         currentPassword: '',
@@ -27,7 +137,7 @@ export function Settings() {
 
                 if (response.ok) {
                     const data = await response.json();
-                    setFormData(prev => ({
+                    setFormData((prev: SettingsFormData) => ({
                         ...prev,
                         fullName: data.user.fullName || data.user.full_name,
                         email: data.user.email
@@ -81,7 +191,7 @@ export function Settings() {
             setMessage({ type: 'success', text: 'Perfil actualizado correctamente' });
 
             // Limpiar campos de contraseña
-            setFormData(prev => ({
+            setFormData((prev: SettingsFormData) => ({
                 ...prev,
                 currentPassword: '',
                 newPassword: '',
@@ -176,6 +286,13 @@ export function Settings() {
                     </Button>
                 </div>
             </form>
+
+            <NotificationSettingsPanel />
         </div>
     );
 }
+
+// Default export because lazy loading in App.tsx might expect it?
+// No, App.tsx uses named import { Settings } from '@/pages/Settings';
+// However, I should check if I should do a default export as well just in case.
+// App.tsx source: import { Settings } from '@/pages/Settings';

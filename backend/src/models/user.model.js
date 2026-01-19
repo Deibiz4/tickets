@@ -3,9 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 const { NotFoundError, UnauthorizedError, ConflictError } = require('../middleware/errorHandler');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/constants');
 
 class User {
   static async create({ username, email, password, fullName, department, phone, role = 'user' }) {
