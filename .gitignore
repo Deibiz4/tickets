@@ -28,3 +28,6 @@ dist-ssr
 # Env files
 .env
 backend/.env
+
+# Assets
+public/jata-logo.png
