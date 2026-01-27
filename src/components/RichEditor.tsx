@@ -12,7 +12,8 @@ const modules = {
     toolbar: [
         ['bold', 'italic', 'underline', 'strike'],
         [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-        ['link', 'code-block'],
+        ['link', 'image', 'code-block'],
+        ['clean']
         ['clean']
     ],
 };
@@ -20,7 +21,7 @@ const modules = {
 const formats = [
     'bold', 'italic', 'underline', 'strike',
     'list', 'bullet',
-    'link', 'code-block'
+    'link', 'image', 'code-block'
 ];
 
 export function RichEditor({ value, onChange, placeholder, disabled }: RichEditorProps) {

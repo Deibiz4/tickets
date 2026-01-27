@@ -1,5 +1,5 @@
 const express = require('express');
-const { check } = require('express-validator');
+const { body, check } = require('express-validator');
 const ticketsController = require('../controllers/tickets.controller');
 const { validateRequest } = require('../middleware/validateRequest');
 const { auth } = require('../middleware/auth');
@@ -23,14 +23,12 @@ router.get('/:id', auth(), ticketsController.getTicketById);
 // @access  Privado
 router.post(
   '/',
+  auth(),
+  upload.single('file'), // Permitir subida de archivos
   [
-    auth(),
-    upload.single('file'), // Permitir subida de archivos
-    [
-      check('title', 'El título es obligatorio').not().isEmpty(),
-      check('description', 'La descripción es obligatoria').not().isEmpty(),
-      check('priority', 'La prioridad es obligatoria').isIn(['low', 'medium', 'high', 'critical']),
-    ],
+    body('title', 'El título es obligatorio').not().isEmpty(),
+    body('description', 'La descripción es obligatoria').not().isEmpty(),
+    body('priority', 'La prioridad es obligatoria').isIn(['low', 'medium', 'high', 'critical']),
   ],
   validateRequest,
   ticketsController.createTicket
@@ -44,8 +42,8 @@ router.put(
   [
     auth(),
     [
-      check('status', 'Estado inválido').optional().isIn(['open', 'in_progress', 'waiting', 'closed']),
-      check('priority', 'Prioridad inválida').optional().isIn(['low', 'medium', 'high', 'critical']),
+      body('status', 'Estado inválido').optional().isIn(['open', 'in_progress', 'waiting', 'closed']),
+      body('priority', 'Prioridad inválida').optional().isIn(['low', 'medium', 'high', 'critical']),
     ],
   ],
   validateRequest,

@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { NotFoundError, BadRequestError } = require('../middleware/errorHandler');
+const fs = require('fs');
 
 const kbController = {
     // Obtener artículos (con búsqueda opcional)
@@ -148,6 +149,77 @@ const kbController = {
     async getCategories(req, res, next) {
         try {
             const result = await query('SELECT * FROM tickets.kb_categories ORDER BY name ASC');
+            res.json(result.rows);
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // Add Attachment
+    async uploadAttachment(req, res, next) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ msg: 'No se subió ningún archivo' });
+            }
+
+            const { id } = req.params;
+            const { originalname, path: filePath, size, mimetype } = req.file;
+
+            const result = await query(
+                `INSERT INTO tickets.kb_attachments 
+                (article_id, file_name, file_path, file_size, mime_type, uploaded_by) 
+                VALUES ($1, $2, $3, $4, $5, $6) 
+                RETURNING *`,
+                [id, originalname, filePath, size, mimetype, req.user.id]
+            );
+
+            res.json(result.rows[0]);
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // Delete Attachment
+    async deleteAttachment(req, res, next) {
+        try {
+            const { id, attachmentId } = req.params;
+
+            // Get file path first
+            const attachRes = await query(
+                'SELECT * FROM tickets.kb_attachments WHERE id = $1 AND article_id = $2',
+                [attachmentId, id]
+            );
+
+            if (attachRes.rows.length === 0) {
+                return res.status(404).json({ msg: 'Adjunto no encontrado' });
+            }
+
+            const attachment = attachRes.rows[0];
+
+            // Delete from DB
+            await query('DELETE FROM tickets.kb_attachments WHERE id = $1', [attachmentId]);
+
+            // Delete file from disk (optional, handled asynchronously to avoid blocking)
+            if (fs.existsSync(attachment.file_path)) {
+                fs.unlink(attachment.file_path, (err) => {
+                    if (err) console.error('Error deleting file:', err);
+                });
+            }
+
+            res.json({ msg: 'Adjunto eliminado' });
+        } catch (error) {
+            next(error);
+        }
+    },
+
+    // Get Attachments
+    async getAttachments(req, res, next) {
+        try {
+            const { id } = req.params;
+            const result = await query(
+                'SELECT * FROM tickets.kb_attachments WHERE article_id = $1 ORDER BY created_at DESC',
+                [id]
+            );
             res.json(result.rows);
         } catch (error) {
             next(error);

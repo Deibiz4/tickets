@@ -113,5 +113,3 @@ Si quieres probar este proyecto en tu propia máquina, sigue estos pasos:
 ```
 
 ---
-
-Hecho con ❤️ para mejorar la productividad.

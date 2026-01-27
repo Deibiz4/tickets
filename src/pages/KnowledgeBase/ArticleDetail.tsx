@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { API_ENDPOINTS } from '@/config/api';
-import { ArrowLeft, Calendar, User, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Edit, Trash2, Paperclip, Download } from 'lucide-react';
+import 'react-quill/dist/quill.snow.css'; // Import styles for content rendering
 
 interface Article {
     id: number;
@@ -21,11 +22,13 @@ export function ArticleDetail() {
     const { token, user } = useAuth();
     const navigate = useNavigate();
     const [article, setArticle] = useState<Article | null>(null);
+    const [attachments, setAttachments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (token && id) {
             fetchArticle();
+            fetchAttachments();
         }
     }, [token, id]);
 
@@ -46,6 +49,19 @@ export function ArticleDetail() {
         }
     };
 
+    const fetchAttachments = async () => {
+        try {
+            const response = await fetch(`${API_ENDPOINTS.KB.ARTICLES}/${id}/attachments`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                setAttachments(await response.json());
+            }
+        } catch (error) {
+            console.error('Error fetching attachments:', error);
+        }
+    };
+
     const handleDelete = async () => {
         if (!confirm('¿Estás seguro de eliminar este artículo?')) return;
         try {
@@ -57,6 +73,13 @@ export function ArticleDetail() {
         } catch (error) {
             console.error('Error deleting article:', error);
         }
+    };
+
+    const handleDownload = (path: string) => {
+        // Construct the full URL for the file
+        // path comes as 'uploads/filename.ext' from DB
+        const url = `${import.meta.env.VITE_API_URL.replace('/api', '')}/${path.replace(/\\/g, '/')}`;
+        window.open(url, '_blank');
     };
 
     const isAdminOrAgent = user?.role === 'admin' || user?.role === 'agent';
@@ -103,12 +126,44 @@ export function ArticleDetail() {
             </div>
 
             <Card>
-                <CardContent className="p-8 prose max-w-none">
-                    <div className="whitespace-pre-wrap font-sans text-gray-800 leading-relaxed">
-                        {article.content}
+                <CardContent className="p-8">
+                    <div className="prose max-w-none ql-editor p-0">
+                        <div dangerouslySetInnerHTML={{ __html: article.content }} />
                     </div>
+
+                    {attachments.length > 0 && (
+                        <div className="mt-8 pt-8 border-t">
+                            <h3 className="text-lg font-medium flex items-center gap-2 mb-4">
+                                <Paperclip className="h-5 w-5" />
+                                Adjuntos
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {attachments.map(att => (
+                                    <div key={att.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border hover:bg-gray-100 transition-colors">
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            <div className="bg-white p-2 rounded border">
+                                                <Paperclip className="h-4 w-4 text-gray-400" />
+                                            </div>
+                                            <div className="flex flex-col overflow-hidden">
+                                                <span className="text-sm font-medium truncate">{att.file_name}</span>
+                                                <span className="text-xs text-gray-500">{(att.file_size / 1024).toFixed(1)} KB</span>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDownload(att.file_path)}
+                                        >
+                                            <Download className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
     );
 }
+

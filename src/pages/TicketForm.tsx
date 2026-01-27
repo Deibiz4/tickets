@@ -4,18 +4,31 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { API_ENDPOINTS } from '@/config/api';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, User } from 'lucide-react';
 import { TicketConversation } from '@/components/TicketConversation';
 import { RichEditor } from '@/components/RichEditor';
+import { useAuth } from '@/context/AuthContext';
+
+interface AdminUser {
+    id: number;
+    username: string;
+    full_name: string;
+    email: string;
+    role: string;
+}
 
 export function TicketForm() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user: currentUser } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const isEditing = !!id;
+    const isAdmin = currentUser?.role === 'admin';
 
     const [creatorInfo, setCreatorInfo] = useState<{ name: string; department: string | null } | null>(null);
+    const [users, setUsers] = useState<AdminUser[]>([]);
+    const [assignedTo, setAssignedTo] = useState<string>('');
 
     const [formData, setFormData] = useState({
         title: '',
@@ -26,6 +39,7 @@ export function TicketForm() {
     const [file, setFile] = useState<File | null>(null);
     const [suggestedArticles, setSuggestedArticles] = useState<any[]>([]);
 
+    // Fetch ticket data when editing
     useEffect(() => {
         if (isEditing) {
             const fetchTicket = async () => {
@@ -48,6 +62,10 @@ export function TicketForm() {
                         name: data.creator_full_name || data.creator_username,
                         department: data.creator_department
                     });
+                    // Set current assignment
+                    if (data.assigned_to) {
+                        setAssignedTo(String(data.assigned_to));
+                    }
                 } catch (err) {
                     setError('No se pudo cargar el ticket');
                 }
@@ -55,6 +73,27 @@ export function TicketForm() {
             fetchTicket();
         }
     }, [id, isEditing]);
+
+    // Fetch users list for assignment (admin only)
+    useEffect(() => {
+        if (isEditing && isAdmin) {
+            const fetchUsers = async () => {
+                try {
+                    const token = localStorage.getItem('token');
+                    const response = await fetch(API_ENDPOINTS.USERS.BASE, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        setUsers(data);
+                    }
+                } catch (error) {
+                    console.error("Error fetching users:", error);
+                }
+            };
+            fetchUsers();
+        }
+    }, [isEditing, isAdmin]);
 
     useEffect(() => {
         const searchKB = async () => {
@@ -110,7 +149,12 @@ export function TicketForm() {
                 body = formDataObj;
             } else {
                 headers['Content-Type'] = 'application/json';
-                body = JSON.stringify(formData);
+                // Include assignedTo in the request body for admins
+                const requestData: any = { ...formData };
+                if (isAdmin && assignedTo) {
+                    requestData.assignedTo = parseInt(assignedTo);
+                }
+                body = JSON.stringify(requestData);
             }
 
             const response = await fetch(url, {
@@ -276,6 +320,32 @@ export function TicketForm() {
                         </div>
                     )}
                 </div>
+
+                {/* User Assignment - Admin Only */}
+                {isEditing && isAdmin && (
+                    <div className="space-y-2 border-t pt-4">
+                        <Label htmlFor="assignedTo" className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            Asignar a Usuario
+                        </Label>
+                        <select
+                            id="assignedTo"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={assignedTo}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssignedTo(e.target.value)}
+                        >
+                            <option value="">Sin asignar</option>
+                            {users.map(user => (
+                                <option key={user.id} value={user.id}>
+                                    {user.full_name} ({user.email})
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500">
+                            Al asignar un usuario, recibirá una notificación por correo electrónico.
+                        </p>
+                    </div>
+                )}
 
                 <div className="flex justify-end gap-4 pt-4">
                     <Button type="button" variant="outline" onClick={() => navigate('/dashboard/tickets')}>

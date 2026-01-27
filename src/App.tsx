@@ -15,6 +15,9 @@ import { Users } from '@/pages/Users';
 import { UserForm } from '@/pages/UserForm';
 import { Settings } from '@/pages/SettingsPage';
 import { DashboardStats } from '@/pages/DashboardStats';
+import { KBIndex } from '@/pages/KnowledgeBase/KBIndex';
+import { ArticleDetail } from '@/pages/KnowledgeBase/ArticleDetail';
+import { ArticleEditor } from '@/pages/KnowledgeBase/ArticleEditor';
 
 // Componente de ruta protegida
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -69,6 +72,10 @@ const AppRoutes = () => {
 
         <Route path="settings" element={<Settings />} />
         <Route path="stats" element={<DashboardStats />} />
+        <Route path="kb" element={<KBIndex />} />
+        <Route path="kb/new" element={<ArticleEditor />} />
+        <Route path="kb/:id" element={<ArticleDetail />} />
+        <Route path="kb/:id/edit" element={<ArticleEditor />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
