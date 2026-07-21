@@ -19,6 +19,19 @@ exports.getComments = async (req, res) => {
             return res.status(401).json({ msg: 'No autorizado' });
         }
 
+        // Validate department access for admins/agents
+        if (req.user.role === 'admin' || req.user.role === 'agent') {
+            const User = require('../models/user.model');
+            const currentUser = await User.findById(req.user.id);
+
+            if (!currentUser.is_super_admin
+                && ticket.department_id !== currentUser.department_id) {
+                return res.status(403).json({
+                    msg: 'No tienes acceso a comentarios de tickets de otros departamentos'
+                });
+            }
+        }
+
         const comments = await Comment.findByTicketId(id);
         const attachments = await Attachment.findByTicketId(id);
 
@@ -50,6 +63,19 @@ exports.addComment = async (req, res) => {
             return res.status(401).json({ msg: 'No autorizado' });
         }
 
+        // Validate department access for admins/agents
+        if (req.user.role === 'admin' || req.user.role === 'agent') {
+            const User = require('../models/user.model');
+            const currentUser = await User.findById(req.user.id);
+
+            if (!currentUser.is_super_admin
+                && ticket.department_id !== currentUser.department_id) {
+                return res.status(403).json({
+                    msg: 'No tienes acceso a este ticket'
+                });
+            }
+        }
+
         // Crear comentario
         const comment = await Comment.create({
             ticketId: id,
@@ -70,10 +96,9 @@ exports.addComment = async (req, res) => {
             });
         }
 
-        // Enviar notificación (async)
-        // Lógica: Si el autor es User -> Notificar Admin/Agente
-        // Si el autor es Admin/Agente -> Notificar al Dueño del Ticket
-        const { sendNewCommentNotification } = require('../services/email.service');
+        // Enviar notificación con debounce (agrupa eventos del mismo ticket en 5 min)
+        const { sendGroupedNotification } = require('../services/email.service');
+        const { enqueue } = require('../services/notificationDebounce.service');
         const User = require('../models/user.model');
         const NotificationModel = require('../models/notification.model');
 
@@ -82,36 +107,42 @@ exports.addComment = async (req, res) => {
                 const isEnabled = await NotificationModel.isEnabled('new_comment');
                 if (!isEnabled) return;
 
-                let recipientEmail = null;
+                const currentUser = await User.findById(req.user.id);
+                const currentUsername = currentUser ? currentUser.username : (req.user.username || 'Sistema');
 
+                let recipientEmail = null;
                 if (req.user.role === 'user') {
-                    // Notificar a quien corresponda (assigned_to o admins)
                     if (ticket.assigned_to) {
                         const agent = await User.findById(ticket.assigned_to);
                         recipientEmail = agent ? agent.email : null;
                     }
                 } else {
-                    // Es admin o agente -> Notificar al usuario creador
                     const creator = await User.findById(ticket.created_by);
                     recipientEmail = creator ? creator.email : null;
                 }
 
-                // [MODIFIED] Agregar al remitente a la lista de notificaciones (CC)
-                // Usamos un Set para evitar duplicados si el remitente es el mismo que el destinatario
                 const recipients = new Set();
                 if (recipientEmail) recipients.add(recipientEmail);
                 if (req.user.email) recipients.add(req.user.email);
 
-                const finalRecipients = Array.from(recipients).join(', ');
-
-                if (finalRecipients) {
-                    await sendNewCommentNotification(ticket, {
-                        username: req.user.username,
-                        content: content || 'Archivo adjunto'
-                    }, finalRecipients);
+                if (recipients.size > 0) {
+                    enqueue(
+                        String(id),
+                        {
+                            type: 'comment',
+                            timestamp: new Date(),
+                            data: {
+                                username: currentUsername,
+                                content: content || 'Archivo adjunto',
+                                ticketTitle: ticket.title
+                            }
+                        },
+                        Array.from(recipients),
+                        sendGroupedNotification
+                    );
                 }
             } catch (notifyErr) {
-                console.error('Error sending comment notification:', notifyErr);
+                console.error('Error enqueuing comment notification:', notifyErr);
             }
         })();
 

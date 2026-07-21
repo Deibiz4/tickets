@@ -1,35 +1,41 @@
-# Etapa de construcción
+# Stage 1: Build
 FROM node:18-alpine AS build
+
 WORKDIR /app
 
-# Copiar archivos de dependencias
-# Copiar archivos de dependencias
+# Copy dependency files first for better layer caching
 COPY package*.json ./
 
-# Instalar dependencias
+# Install dependencies using npm install to handle out-of-sync lock files
 RUN npm install
 
-# ARG para variables de entorno de construcción
+# ARG for build-time environment variables
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
-# Copiar el resto de los archivos
+# Copy the rest of the application
 COPY . .
 
-# Construir la aplicación
+# Build the application
 RUN npm run build
 
-# Etapa de producción
+# Stage 2: Production
 FROM nginx:alpine
 
-# Copiar la aplicación construida
+# Remove default nginx static assets
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy built app from the build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copiar la configuración de nginx
+# Copy the optimized nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Exponer el puerto 5175
+# Expose the frontend port
 EXPOSE 5175
 
-# Iniciar nginx
+# Use a non-root user for security (optional but recommended)
+# Note: nginx:alpine doesn't easily support running as non-root on port < 1024
+# without extra config, so we'll stick to default for now.
+
 CMD ["nginx", "-g", "daemon off;"]

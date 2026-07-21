@@ -1,33 +1,35 @@
-const { query } = require('../config/db');
+const { poolPromise, sql } = require('../config/db');
 
 class NotificationModel {
     static async getSettings() {
-        const result = await query(
-            'SELECT * FROM tickets.notification_settings ORDER BY id ASC'
-        );
-        return result.rows;
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .query('SELECT * FROM tickets.notification_settings ORDER BY id ASC');
+        return result.recordset;
     }
 
     static async updateSetting(eventType, enabled) {
-        const result = await query(
-            `UPDATE tickets.notification_settings 
-       SET enabled = $1, updated_at = NOW() 
-       WHERE event_type = $2 
-       RETURNING *`,
-            [enabled, eventType]
-        );
-        return result.rows[0];
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('enabled', sql.Bit, enabled) // MSSQL uses BIT for boolean
+            .input('eventType', sql.VarChar, eventType)
+            .query(`
+        UPDATE tickets.notification_settings 
+        SET enabled = @enabled, updated_at = SYSDATETIME() 
+        OUTPUT Inserted.*
+        WHERE event_type = @eventType
+      `);
+        return result.recordset[0];
     }
 
     static async isEnabled(eventType) {
-        const result = await query(
-            'SELECT enabled FROM tickets.notification_settings WHERE event_type = $1',
-            [eventType]
-        );
-        // If setting doesn't exist, default to true for safety, or false depending on preference.
-        // Given the init script, it should exist.
-        if (result.rows.length === 0) return false;
-        return result.rows[0].enabled;
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('eventType', sql.VarChar, eventType)
+            .query('SELECT enabled FROM tickets.notification_settings WHERE event_type = @eventType');
+
+        if (result.recordset.length === 0) return false;
+        return result.recordset[0].enabled;
     }
 }
 

@@ -60,32 +60,27 @@ router.put(
   authController.updateProfile
 );
 
-// @route   GET api/auth/microsoft
-// @desc    Iniciar sesión con Microsoft
+
+
+// @route   POST api/auth/forgot-password
 // @access  Público
-const passport = require('passport');
-router.get('/microsoft', passport.authenticate('microsoft', {
-  prompt: 'select_account',
-}));
+router.post(
+  '/forgot-password',
+  [check('email', 'Por favor incluye un email válido').isEmail()],
+  validateRequest,
+  authController.forgotPassword
+);
 
-// @route   GET api/auth/microsoft/callback
-// @desc    Callback de Microsoft
+// @route   POST api/auth/reset-password
 // @access  Público
-router.get(
-  '/microsoft/callback',
-  passport.authenticate('microsoft', { session: false, failureRedirect: '/login' }),
-  (req, res) => {
-    // Generar token JWT
-    const User = require('../models/user.model');
-    const token = User.generateAuthToken(req.user);
-
-    // Redirigir al frontend con el token
-    const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:5173';
-    // Si CORS_ORIGIN es una lista, tomar el primero o usar default
-    const redirectUrl = frontendUrl.split(',')[0] || 'http://localhost:5173';
-
-    res.redirect(`${redirectUrl}/login?token=${token}`);
-  }
+router.post(
+  '/reset-password',
+  [
+    check('token', 'El token es obligatorio').not().isEmpty(),
+    check('password', 'La contraseña debe tener al menos 6 caracteres').isLength({ min: 6 }),
+  ],
+  validateRequest,
+  authController.resetPassword
 );
 
 module.exports = router;

@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+const { poolPromise, sql } = require('../config/db');
 const { NotFoundError, BadRequestError } = require('../middleware/errorHandler');
 const fs = require('fs');
 
@@ -7,7 +7,9 @@ const kbController = {
     async getArticles(req, res, next) {
         try {
             const { search, category_id } = req.query;
-            const values = [];
+            const pool = await poolPromise;
+            const request = pool.request();
+
             let queryText = `
         SELECT a.id, a.title, a.content, a.is_published, a.created_at,
                c.name as category_name,
@@ -15,27 +17,23 @@ const kbController = {
         FROM tickets.kb_articles a
         LEFT JOIN tickets.kb_categories c ON a.category_id = c.id
         LEFT JOIN tickets.users u ON a.author_id = u.id
-        WHERE a.is_published = true
-      `;
-
-            let paramIndex = 1;
+        WHERE a.is_published = 1
+      `; // 1 for true
 
             if (search) {
-                queryText += ` AND (a.title ILIKE $${paramIndex} OR a.content ILIKE $${paramIndex})`;
-                values.push(`%${search}%`);
-                paramIndex++;
+                queryText += ` AND (a.title LIKE @search OR a.content LIKE @search)`;
+                request.input('search', sql.NVarChar, `%${search}%`);
             }
 
             if (category_id) {
-                queryText += ` AND a.category_id = $${paramIndex}`;
-                values.push(category_id);
-                paramIndex++;
+                queryText += ` AND a.category_id = @category_id`;
+                request.input('category_id', sql.Int, category_id);
             }
 
             queryText += ' ORDER BY a.created_at DESC';
 
-            const result = await query(queryText, values);
-            res.json(result.rows);
+            const result = await request.query(queryText);
+            res.json(result.recordset);
         } catch (error) {
             next(error);
         }
@@ -45,20 +43,22 @@ const kbController = {
     async getArticle(req, res, next) {
         try {
             const { id } = req.params;
-            const result = await query(
-                `SELECT a.*, c.name as category_name, u.full_name as author_name 
-         FROM tickets.kb_articles a
-         LEFT JOIN tickets.kb_categories c ON a.category_id = c.id
-         LEFT JOIN tickets.users u ON a.author_id = u.id
-         WHERE a.id = $1`,
-                [id]
-            );
+            const pool = await poolPromise;
+            const result = await pool.request()
+                .input('id', sql.Int, id)
+                .query(`
+          SELECT a.*, c.name as category_name, u.full_name as author_name 
+          FROM tickets.kb_articles a
+          LEFT JOIN tickets.kb_categories c ON a.category_id = c.id
+          LEFT JOIN tickets.users u ON a.author_id = u.id
+          WHERE a.id = @id
+        `);
 
-            if (result.rows.length === 0) {
+            if (result.recordset.length === 0) {
                 throw new NotFoundError('Artículo no encontrado');
             }
 
-            res.json(result.rows[0]);
+            res.json(result.recordset[0]);
         } catch (error) {
             next(error);
         }
@@ -74,14 +74,20 @@ const kbController = {
                 throw new BadRequestError('Título, contenido y categoría son obligatorios');
             }
 
-            const result = await query(
-                `INSERT INTO tickets.kb_articles (title, content, category_id, author_id, is_published)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, title, created_at`,
-                [title, content, category_id, author_id, is_published ?? true]
-            );
+            const pool = await poolPromise;
+            const result = await pool.request()
+                .input('title', sql.NVarChar, title)
+                .input('content', sql.NVarChar, content)
+                .input('category_id', sql.Int, category_id)
+                .input('author_id', sql.Int, author_id)
+                .input('is_published', sql.Bit, is_published ?? true)
+                .query(`
+          INSERT INTO tickets.kb_articles (title, content, category_id, author_id, is_published)
+          OUTPUT Inserted.id, Inserted.title, Inserted.created_at
+          VALUES (@title, @content, @category_id, @author_id, @is_published)
+        `);
 
-            res.status(201).json(result.rows[0]);
+            res.status(201).json(result.recordset[0]);
         } catch (error) {
             next(error);
         }
@@ -95,35 +101,44 @@ const kbController = {
 
             // Construir query dinámica
             const updates = [];
-            const values = [];
-            let paramIndex = 1;
+            const pool = await poolPromise;
+            const request = pool.request();
+            request.input('id', sql.Int, id);
 
-            if (title) { updates.push(`title = $${paramIndex++}`); values.push(title); }
-            if (content) { updates.push(`content = $${paramIndex++}`); values.push(content); }
-            if (category_id) { updates.push(`category_id = $${paramIndex++}`); values.push(category_id); }
-            if (is_published !== undefined) { updates.push(`is_published = $${paramIndex++}`); values.push(is_published); }
+            if (title) {
+                updates.push('title = @title');
+                request.input('title', sql.NVarChar, title);
+            }
+            if (content) {
+                updates.push('content = @content');
+                request.input('content', sql.NVarChar, content);
+            }
+            if (category_id) {
+                updates.push('category_id = @category_id');
+                request.input('category_id', sql.Int, category_id);
+            }
+            if (is_published !== undefined) {
+                updates.push('is_published = @is_published');
+                request.input('is_published', sql.Bit, is_published);
+            }
 
             if (updates.length === 0) {
                 return res.json({ message: 'No changes provided' });
             }
 
-            updates.push(`updated_at = NOW()`);
-
             const queryText = `
         UPDATE tickets.kb_articles 
-        SET ${updates.join(', ')} 
-        WHERE id = $${paramIndex} 
-        RETURNING *`;
+        SET ${updates.join(', ')}, updated_at = SYSDATETIME() 
+        OUTPUT Inserted.*
+        WHERE id = @id`;
 
-            values.push(id);
+            const result = await request.query(queryText);
 
-            const result = await query(queryText, values);
-
-            if (result.rows.length === 0) {
+            if (result.recordset.length === 0) {
                 throw new NotFoundError('Artículo no encontrado');
             }
 
-            res.json(result.rows[0]);
+            res.json(result.recordset[0]);
         } catch (error) {
             next(error);
         }
@@ -133,9 +148,12 @@ const kbController = {
     async deleteArticle(req, res, next) {
         try {
             const { id } = req.params;
-            const result = await query('DELETE FROM tickets.kb_articles WHERE id = $1 RETURNING id', [id]);
+            const pool = await poolPromise;
+            const result = await pool.request()
+                .input('id', sql.Int, id)
+                .query('DELETE FROM tickets.kb_articles OUTPUT Deleted.id WHERE id = @id');
 
-            if (result.rows.length === 0) {
+            if (result.recordset.length === 0) {
                 throw new NotFoundError('Artículo no encontrado');
             }
 
@@ -148,8 +166,10 @@ const kbController = {
     // Listar categorías
     async getCategories(req, res, next) {
         try {
-            const result = await query('SELECT * FROM tickets.kb_categories ORDER BY name ASC');
-            res.json(result.rows);
+            const pool = await poolPromise;
+            const result = await pool.request()
+                .query('SELECT * FROM tickets.kb_categories ORDER BY name ASC');
+            res.json(result.recordset);
         } catch (error) {
             next(error);
         }
@@ -165,15 +185,22 @@ const kbController = {
             const { id } = req.params;
             const { originalname, path: filePath, size, mimetype } = req.file;
 
-            const result = await query(
-                `INSERT INTO tickets.kb_attachments 
-                (article_id, file_name, file_path, file_size, mime_type, uploaded_by) 
-                VALUES ($1, $2, $3, $4, $5, $6) 
-                RETURNING *`,
-                [id, originalname, filePath, size, mimetype, req.user.id]
-            );
+            const pool = await poolPromise;
+            const result = await pool.request()
+                .input('id', sql.Int, id)
+                .input('file_name', sql.VarChar, originalname)
+                .input('file_path', sql.VarChar, filePath)
+                .input('file_size', sql.Int, size)
+                .input('mime_type', sql.VarChar, mimetype)
+                .input('uploaded_by', sql.Int, req.user.id)
+                .query(`
+          INSERT INTO tickets.kb_attachments 
+          (article_id, file_name, file_path, file_size, mime_type, uploaded_by) 
+          OUTPUT Inserted.*
+          VALUES (@id, @file_name, @file_path, @file_size, @mime_type, @uploaded_by) 
+        `);
 
-            res.json(result.rows[0]);
+            res.json(result.recordset[0]);
         } catch (error) {
             next(error);
         }
@@ -183,21 +210,24 @@ const kbController = {
     async deleteAttachment(req, res, next) {
         try {
             const { id, attachmentId } = req.params;
+            const pool = await poolPromise;
 
             // Get file path first
-            const attachRes = await query(
-                'SELECT * FROM tickets.kb_attachments WHERE id = $1 AND article_id = $2',
-                [attachmentId, id]
-            );
+            const attachRes = await pool.request()
+                .input('attachmentId', sql.Int, attachmentId)
+                .input('articleId', sql.Int, id)
+                .query('SELECT * FROM tickets.kb_attachments WHERE id = @attachmentId AND article_id = @articleId');
 
-            if (attachRes.rows.length === 0) {
+            if (attachRes.recordset.length === 0) {
                 return res.status(404).json({ msg: 'Adjunto no encontrado' });
             }
 
-            const attachment = attachRes.rows[0];
+            const attachment = attachRes.recordset[0];
 
             // Delete from DB
-            await query('DELETE FROM tickets.kb_attachments WHERE id = $1', [attachmentId]);
+            await pool.request()
+                .input('attachmentId', sql.Int, attachmentId)
+                .query('DELETE FROM tickets.kb_attachments WHERE id = @attachmentId');
 
             // Delete file from disk (optional, handled asynchronously to avoid blocking)
             if (fs.existsSync(attachment.file_path)) {
@@ -216,11 +246,11 @@ const kbController = {
     async getAttachments(req, res, next) {
         try {
             const { id } = req.params;
-            const result = await query(
-                'SELECT * FROM tickets.kb_attachments WHERE article_id = $1 ORDER BY created_at DESC',
-                [id]
-            );
-            res.json(result.rows);
+            const pool = await poolPromise;
+            const result = await pool.request()
+                .input('id', sql.Int, id)
+                .query('SELECT * FROM tickets.kb_attachments WHERE article_id = @id ORDER BY created_at DESC');
+            res.json(result.recordset);
         } catch (error) {
             next(error);
         }

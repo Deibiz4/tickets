@@ -5,7 +5,15 @@ const User = require('../models/user.model');
 // @access  Privado (Admin)
 exports.getUsers = async (req, res, next) => {
     try {
-        const users = await User.getAllUsers();
+        const departmentId = req.query.departmentId;
+
+        let users;
+        if (departmentId) {
+            users = await User.getUsersByDepartment(parseInt(departmentId));
+        } else {
+            users = await User.getAllUsers();
+        }
+
         res.json(users);
     } catch (err) {
         console.error(err.message);
@@ -59,13 +67,20 @@ exports.updateUserRole = async (req, res, next) => {
 // @access  Privado (Admin)
 exports.createUser = async (req, res, next) => {
     try {
-        const { username, email, password, fullName, department, phone, role } = req.body;
+        const { username, email, password, fullName, departmentId, phone, role } = req.body;
 
-        if (!username || !email || !password || !fullName || !department) {
+        if (!username || !email || !password || !fullName || !departmentId) {
             return res.status(400).json({ msg: 'Por favor ingrese todos los campos obligatorios' });
         }
 
-        const user = await User.create({ username, email, password, fullName, department, phone, role });
+        // Validate that department exists
+        const Department = require('../models/department.model');
+        const department = await Department.findById(departmentId);
+        if (!department) {
+            return res.status(400).json({ msg: 'El departamento seleccionado no existe' });
+        }
+
+        const user = await User.create({ username, email, password, fullName, departmentId, phone, role });
         res.json(user);
     } catch (err) {
         console.error(err.message);
@@ -109,15 +124,27 @@ exports.deleteUser = async (req, res, next) => {
         const adminId = req.user.id;
         const targetId = req.params.id;
 
-        // Importar pool para queries directas (o usar modelo si tuviera métodos, usaremos queries directas por simplicidad aqui)
-        const { query } = require('../config/db');
+        // Usar poolPromise para queries directas
+        const { poolPromise, sql } = require('../config/db');
+        const pool = await poolPromise;
 
         // Reasignar Tickets creados
-        await query('UPDATE tickets.tickets SET created_by = $1 WHERE created_by = $2', [adminId, targetId]);
+        await pool.request()
+            .input('adminId', sql.Int, adminId)
+            .input('targetId', sql.Int, targetId)
+            .query('UPDATE tickets.tickets SET created_by = @adminId WHERE created_by = @targetId');
+
         // Reasignar Tickets asignados
-        await query('UPDATE tickets.tickets SET assigned_to = $1 WHERE assigned_to = $2', [adminId, targetId]);
+        await pool.request()
+            .input('adminId', sql.Int, adminId)
+            .input('targetId', sql.Int, targetId)
+            .query('UPDATE tickets.tickets SET assigned_to = @adminId WHERE assigned_to = @targetId');
+
         // Reasignar Comentarios
-        await query('UPDATE tickets.comments SET user_id = $1 WHERE user_id = $2', [adminId, targetId]);
+        await pool.request()
+            .input('adminId', sql.Int, adminId)
+            .input('targetId', sql.Int, targetId)
+            .query('UPDATE tickets.comments SET user_id = @adminId WHERE user_id = @targetId');
 
         await User.delete(req.params.id);
         res.json({ msg: 'Usuario eliminado correctamente. Sus tickets y comentarios han sido reasignados a ti.' });

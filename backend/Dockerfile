@@ -1,20 +1,26 @@
-# Usar imagen base de Node.js
+# Stage 2: Production
 FROM node:18-alpine
 
-# Establecer el directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos de configuración
+# Install only production dependencies
 COPY package*.json ./
+RUN npm install --only=production && \
+    mkdir -p logs uploads && \
+    chown -R node:node /app
 
-# Instalar dependencias
-RUN npm install
+# Copy source code
+COPY src ./src
 
-# Copiar el resto de los archivos
-COPY . .
+# Ensure source code also belongs to 'node'
+RUN chown -R node:node /app/src
 
-# Puerto expuesto (puerto interno del contenedor)
+# Set environment to production
+ENV NODE_ENV=production
+
+# Use non-root user
+USER node
+
 EXPOSE 3000
 
-# Comando para iniciar la aplicación
 CMD ["node", "src/index.js"]

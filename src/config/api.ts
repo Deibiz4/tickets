@@ -7,6 +7,8 @@ export const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/auth/login`,
     REGISTER: `${API_BASE_URL}/auth/register`,
     PROFILE: `${API_BASE_URL}/auth/me`,
+    FORGOT_PASSWORD: `${API_BASE_URL}/auth/forgot-password`,
+    RESET_PASSWORD: `${API_BASE_URL}/auth/reset-password`,
   },
   TICKETS: {
     BASE: `${API_BASE_URL}/tickets`,
@@ -29,5 +31,9 @@ export const API_ENDPOINTS = {
   KB: {
     ARTICLES: `${API_BASE_URL}/kb/articles`,
     CATEGORIES: `${API_BASE_URL}/kb/categories`,
+  },
+  ADMIN: {
+    USERS: `${API_BASE_URL}/admin/users`,
+    USER_BY_ID: (id: string) => `${API_BASE_URL}/admin/users/${id}`,
   },
 };

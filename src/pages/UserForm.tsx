@@ -17,7 +17,7 @@ export function UserForm() {
         email: '',
         password: '',
         fullName: '',
-        department: '',
+        departmentId: '' as string | number,
         phone: '',
         role: 'user'
     });
@@ -55,9 +55,9 @@ export function UserForm() {
                     setFormData({
                         username: data.username,
                         email: data.email,
-                        password: '', // No password on edit load
-                        fullName: data.full_name || data.fullName, // handle snake_case or camelCase from API
-                        department: data.department || '',
+                        password: '',
+                        fullName: data.full_name || data.fullName,
+                        departmentId: data.department_id || '',
                         phone: data.phone_number || data.phone || '',
                         role: data.role
                     });
@@ -153,13 +153,13 @@ export function UserForm() {
                     <select
                         id="department"
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        value={formData.department}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                        value={formData.departmentId}
+                        onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
                         required
                     >
                         <option value="">Selecciona un departamento</option>
                         {departments.map((dept) => (
-                            <option key={dept.id} value={dept.name}>
+                            <option key={dept.id} value={dept.id}>
                                 {dept.name}
                             </option>
                         ))}

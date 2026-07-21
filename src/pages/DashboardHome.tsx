@@ -39,7 +39,9 @@ export function DashboardHome() {
         fetchTickets();
     }, []);
 
-    const recentTickets = tickets.slice(0, 5); // Show only 5 most recent
+    const recentTickets = tickets
+        .filter(t => t.status !== 'closed')
+        .slice(0, 5); // Show only 5 most recent active tickets
 
     const getStatusColor = (status: string) => {
         switch (status) {

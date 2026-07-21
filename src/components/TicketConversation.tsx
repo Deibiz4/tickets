@@ -94,12 +94,8 @@ export function TicketConversation({ ticketId }: TicketConversationProps) {
     };
 
     const getFileUrl = (path: string) => {
-        // Asumiendo que el backend sirve uploads en /uploads y path viene relativo o absoluto
-        // El path guardado por multer es 'uploads\filename' en windows o 'uploads/filename' en linux
-        // Necesitamos normalizarlo para URL
         const filename = path.split(/[/\\]/).pop();
-        // Usar el puerto 3001 que es el del backend según api.ts
-        return `http://localhost:3001/uploads/${filename}`;
+        return `/uploads/${filename}`;
     };
 
     return (

@@ -1,12 +1,12 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
-const { query } = require('../config/db');
+const { poolPromise, sql } = require('../config/db');
 const { NotFoundError, UnauthorizedError, ConflictError } = require('../middleware/errorHandler');
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/constants');
 
 class User {
-  static async create({ username, email, password, fullName, department, phone, role = 'user' }) {
+  static async create({ username, email, password, fullName, departmentId, phone, role = 'user' }) {
     // Verificar si el usuario ya existe
     const existingUser = await this.findByEmail(email);
     if (existingUser) {
@@ -14,35 +14,57 @@ class User {
     }
 
     // Hashear la contraseña
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(password, salt);
 
-    // Insertar nuevo usuario
-    const result = await query(
-      `INSERT INTO tickets.users 
-       (username, email, password_hash, full_name, department, phone_number, role) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
-       RETURNING id, username, email, full_name, department, phone_number, role, created_at`,
-      [username, email, hashedPassword, fullName, department, phone, role]
-    );
+    try {
+      const pool = await poolPromise;
+      const result = await pool.request()
+        .input('username', sql.VarChar, username)
+        .input('email', sql.VarChar, email)
+        .input('password_hash', sql.VarChar, hashedPassword)
+        .input('full_name', sql.VarChar, fullName)
+        .input('department_id', sql.Int, departmentId)
+        .input('phone_number', sql.VarChar, phone)
+        .input('role', sql.VarChar, role)
+        .query(`
+          INSERT INTO tickets.users
+          (username, email, password_hash, full_name, department_id, phone_number, role)
+          OUTPUT Inserted.id, Inserted.username, Inserted.email, Inserted.full_name, Inserted.department_id, Inserted.phone_number, Inserted.role, Inserted.created_at
+          VALUES (@username, @email, @password_hash, @full_name, @department_id, @phone_number, @role)
+        `);
 
-    return result.rows[0];
+      return result.recordset[0];
+    } catch (err) {
+      throw err;
+    }
   }
 
   static async findByEmail(email) {
-    const result = await query(
-      'SELECT * FROM tickets.users WHERE email = $1',
-      [email]
-    );
-    return result.rows[0] || null;
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('email', sql.VarChar, email)
+      .query(`
+        SELECT u.*, d.name as department_name
+        FROM tickets.users u
+        LEFT JOIN tickets.departments d ON u.department_id = d.id
+        WHERE u.email = @email
+      `);
+    return result.recordset[0] || null;
   }
 
   static async findById(id) {
-    const result = await query(
-      'SELECT id, username, email, full_name, department, phone_number, role, created_at FROM tickets.users WHERE id = $1',
-      [id]
-    );
-    return result.rows[0] || null;
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .query(`
+        SELECT u.id, u.username, u.email, u.full_name, u.department_id, d.name as department_name,
+               u.phone_number, u.role, u.is_super_admin, u.created_at
+        FROM tickets.users u
+        LEFT JOIN tickets.departments d ON u.department_id = d.id
+        WHERE u.id = @id
+      `);
+    return result.recordset[0] || null;
   }
 
   static async authenticate(email, password) {
@@ -51,7 +73,7 @@ class User {
       throw new UnauthorizedError('Credenciales inválidas');
     }
 
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
       throw new UnauthorizedError('Credenciales inválidas');
     }
@@ -66,6 +88,7 @@ class User {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         role: user.role
       }
     };
@@ -73,59 +96,59 @@ class User {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
   }
 
-  static async updateProfile(userId, { fullName, email, department, phone, currentPassword, newPassword }) {
+  static async updateProfile(userId, { fullName, email, departmentId, phone, currentPassword, newPassword }) {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundError('Usuario no encontrado');
     }
 
+    const pool = await poolPromise;
+    const request = pool.request();
+    request.input('id', sql.Int, userId);
+
     const updates = [];
-    const values = [];
-    let paramIndex = 1;
 
     if (fullName) {
-      updates.push(`full_name = $${paramIndex++}`);
-      values.push(fullName);
+      updates.push('full_name = @full_name');
+      request.input('full_name', sql.VarChar, fullName);
     }
 
-    if (department) {
-      updates.push(`department = $${paramIndex++}`);
-      values.push(department);
+    if (departmentId) {
+      updates.push('department_id = @department_id');
+      request.input('department_id', sql.Int, departmentId);
     }
 
     if (phone !== undefined) {
-      updates.push(`phone_number = $${paramIndex++}`);
-      values.push(phone);
+      updates.push('phone_number = @phone_number');
+      request.input('phone_number', sql.VarChar, phone);
     }
 
     if (email && email !== user.email) {
-      // Verificar si el nuevo correo ya existe
       const existingUser = await this.findByEmail(email);
       if (existingUser && existingUser.id !== userId) {
         throw new ConflictError('El correo electrónico ya está en uso');
       }
-      updates.push(`email = $${paramIndex++}`);
-      values.push(email);
+      updates.push('email = @email');
+      request.input('email', sql.VarChar, email);
     }
 
     if (currentPassword && newPassword) {
-      // Verificar la contraseña actual
-      const userWithPassword = await query(
-        'SELECT password_hash FROM tickets.users WHERE id = $1',
-        [userId]
-      );
+      const userWithPasswordResult = await pool.request()
+        .input('id', sql.Int, userId)
+        .query('SELECT password_hash FROM tickets.users WHERE id = @id');
 
-      const isMatch = await bcrypt.compare(currentPassword, userWithPassword.rows[0].password_hash);
+      const userWithPassword = userWithPasswordResult.recordset[0];
+
+      const isMatch = await bcrypt.compare(currentPassword, userWithPassword.password_hash);
       if (!isMatch) {
         throw new UnauthorizedError('Contraseña actual incorrecta');
       }
 
-      // Hashear la nueva contraseña
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(newPassword, salt);
+      const salt = bcrypt.genSaltSync(10);
+      const hashedPassword = bcrypt.hashSync(newPassword, salt);
 
-      updates.push(`password_hash = $${paramIndex++}`);
-      values.push(hashedPassword);
+      updates.push('password_hash = @password_hash');
+      request.input('password_hash', sql.VarChar, hashedPassword);
     }
 
     if (updates.length === 0) {
@@ -133,22 +156,27 @@ class User {
     }
 
     const queryText = `
-      UPDATE tickets.users 
-      SET ${updates.join(', ')}, updated_at = NOW() 
-      WHERE id = $${paramIndex} 
-      RETURNING id, username, email, full_name, department, phone_number, role, created_at
+      UPDATE tickets.users
+      SET ${updates.join(', ')}, updated_at = SYSDATETIME()
+      OUTPUT Inserted.id, Inserted.username, Inserted.email, Inserted.full_name, Inserted.department_id, Inserted.phone_number, Inserted.role, Inserted.created_at
+      WHERE id = @id
     `;
 
-    values.push(userId);
-    const result = await query(queryText, values);
-    return result.rows[0];
+    const result = await request.query(queryText);
+    return result.recordset[0];
   }
 
   static async getAllUsers() {
-    const result = await query(
-      'SELECT id, username, email, full_name, department, phone_number, role, created_at FROM tickets.users ORDER BY created_at DESC'
-    );
-    return result.rows;
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .query(`
+        SELECT u.id, u.username, u.email, u.full_name, u.department_id, d.name as department_name,
+               u.phone_number, u.role, u.is_super_admin, u.created_at
+        FROM tickets.users u
+        LEFT JOIN tickets.departments d ON u.department_id = d.id
+        ORDER BY u.created_at DESC
+      `);
+    return result.recordset;
   }
 
   static async updateUserRole(userId, role) {
@@ -157,38 +185,46 @@ class User {
       throw new Error('Rol no válido');
     }
 
-    const result = await query(
-      `UPDATE tickets.users 
-       SET role = $1, updated_at = NOW() 
-       WHERE id = $2 
-       RETURNING id, username, email, full_name, role, created_at`,
-      [role, userId]
-    );
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('role', sql.VarChar, role)
+      .input('id', sql.Int, userId)
+      .query(`
+        UPDATE tickets.users
+        SET role = @role, updated_at = SYSDATETIME()
+        OUTPUT Inserted.id, Inserted.username, Inserted.email, Inserted.full_name, Inserted.department_id, Inserted.role, Inserted.created_at
+        WHERE id = @id
+      `);
 
-    if (result.rows.length === 0) {
+    if (result.recordset.length === 0) {
       throw new NotFoundError('Usuario no encontrado');
     }
 
-    return result.rows[0];
+    return result.recordset[0];
   }
 
-  static async updateUser(userId, { username, email, fullName, department, phone, role, password }) {
+  static async updateUser(userId, { username, email, fullName, departmentId, phone, role, password, is_super_admin }) {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundError('Usuario no encontrado');
     }
 
+    const pool = await poolPromise;
+    const request = pool.request();
+    request.input('id', sql.Int, userId);
+
     const updates = [];
-    const values = [];
-    let paramIndex = 1;
 
     if (username && username !== user.username) {
-      const existingUser = await query('SELECT id FROM tickets.users WHERE username = $1', [username]);
-      if (existingUser.rows.length > 0 && existingUser.rows[0].id !== userId) {
+      const existingUserResult = await pool.request()
+        .input('username', sql.VarChar, username)
+        .query('SELECT id FROM tickets.users WHERE username = @username');
+
+      if (existingUserResult.recordset.length > 0 && existingUserResult.recordset[0].id !== userId) {
         throw new ConflictError('El nombre de usuario ya está en uso');
       }
-      updates.push(`username = $${paramIndex++}`);
-      values.push(username);
+      updates.push('username = @username');
+      request.input('username', sql.VarChar, username);
     }
 
     if (email && email !== user.email) {
@@ -196,23 +232,23 @@ class User {
       if (existingUser && existingUser.id !== userId) {
         throw new ConflictError('El correo electrónico ya está en uso');
       }
-      updates.push(`email = $${paramIndex++}`);
-      values.push(email);
+      updates.push('email = @email');
+      request.input('email', sql.VarChar, email);
     }
 
     if (fullName) {
-      updates.push(`full_name = $${paramIndex++}`);
-      values.push(fullName);
+      updates.push('full_name = @full_name');
+      request.input('full_name', sql.VarChar, fullName);
     }
 
-    if (department) {
-      updates.push(`department = $${paramIndex++}`);
-      values.push(department);
+    if (departmentId) {
+      updates.push('department_id = @department_id');
+      request.input('department_id', sql.Int, departmentId);
     }
 
     if (phone !== undefined) {
-      updates.push(`phone_number = $${paramIndex++}`);
-      values.push(phone);
+      updates.push('phone_number = @phone_number');
+      request.input('phone_number', sql.VarChar, phone);
     }
 
     if (role) {
@@ -220,15 +256,23 @@ class User {
       if (!validRoles.includes(role)) {
         throw new Error('Rol no válido');
       }
-      updates.push(`role = $${paramIndex++}`);
-      values.push(role);
+      updates.push('role = @role');
+      request.input('role', sql.VarChar, role);
+    }
+
+    if (is_super_admin !== undefined) {
+      if (typeof is_super_admin !== 'boolean') {
+        throw new Error('is_super_admin debe ser un booleano');
+      }
+      updates.push('is_super_admin = @is_super_admin');
+      request.input('is_super_admin', sql.Bit, is_super_admin ? 1 : 0);
     }
 
     if (password) {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      updates.push(`password_hash = $${paramIndex++}`);
-      values.push(hashedPassword);
+      const salt = bcrypt.genSaltSync(10);
+      const hashedPassword = bcrypt.hashSync(password, salt);
+      updates.push('password_hash = @password_hash');
+      request.input('password_hash', sql.VarChar, hashedPassword);
     }
 
     if (updates.length === 0) {
@@ -236,19 +280,117 @@ class User {
     }
 
     const queryText = `
-      UPDATE tickets.users 
-      SET ${updates.join(', ')}, updated_at = NOW() 
-      WHERE id = $${paramIndex} 
-      RETURNING id, username, email, full_name, department, phone_number, role, created_at
+      UPDATE tickets.users
+      SET ${updates.join(', ')}, updated_at = SYSDATETIME()
+      OUTPUT Inserted.id, Inserted.username, Inserted.email, Inserted.full_name, Inserted.department_id, Inserted.phone_number, Inserted.role, Inserted.created_at
+      WHERE id = @id
     `;
 
-    values.push(userId);
-    const result = await query(queryText, values);
-    return result.rows[0];
+    const result = await request.query(queryText);
+    return result.recordset[0];
   }
+
+  static async getUsersByDepartment(departmentId) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('department_id', sql.Int, departmentId)
+      .query(`
+        SELECT u.id, u.username, u.email, u.full_name, u.department_id, d.name as department_name,
+               u.phone_number, u.role
+        FROM tickets.users u
+        LEFT JOIN tickets.departments d ON u.department_id = d.id
+        WHERE u.department_id = @department_id
+        AND (u.role = 'admin' OR u.role = 'agent')
+        ORDER BY u.full_name ASC
+      `);
+    return result.recordset;
+  }
+
+  static async getAdminEmailsByDepartment(departmentId) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('department_id', sql.Int, departmentId)
+      .query(`
+        SELECT email
+        FROM tickets.users
+        WHERE (role = 'admin' OR role = 'agent')
+        AND (is_super_admin = 1 OR department_id = @department_id)
+      `);
+    return result.recordset.map(u => u.email);
+  }
+
+  static async getDepartmentEmails(departmentId) {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('department_id', sql.Int, departmentId)
+      .query(`
+        SELECT email
+        FROM tickets.users
+        WHERE is_super_admin = 1 OR department_id = @department_id
+      `);
+    return result.recordset.map(u => u.email);
+  }
+
+  static async getAllSystemEmails() {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .query(`
+        SELECT email
+        FROM tickets.users
+        WHERE email IS NOT NULL AND email != ''
+      `);
+    return result.recordset.map(u => u.email);
+  }
+
   static async delete(id) {
-    const result = await query('DELETE FROM tickets.users WHERE id = $1 RETURNING id', [id]);
-    return result.rows[0];
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .query('DELETE FROM tickets.users OUTPUT Deleted.id WHERE id = @id');
+    return result.recordset[0];
+  }
+
+  static async setResetToken(email) {
+    const crypto = require('crypto');
+    const user = await this.findByEmail(email);
+    if (!user) return null;
+
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    const pool = await poolPromise;
+    await pool.request()
+      .input('token', sql.VarChar, tokenHash)
+      .input('expires', sql.DateTime2, expires)
+      .input('email', sql.VarChar, email)
+      .query(`UPDATE tickets.users SET reset_token = @token, reset_token_expires = @expires WHERE email = @email`);
+
+    return plainToken;
+  }
+
+  static async resetPasswordByToken(plainToken, newPassword) {
+    const crypto = require('crypto');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input('token', sql.VarChar, tokenHash)
+      .input('now', sql.DateTime2, new Date())
+      .query(`SELECT id FROM tickets.users WHERE reset_token = @token AND reset_token_expires > @now`);
+
+    if (result.recordset.length === 0) return false;
+
+    const userId = result.recordset[0].id;
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(newPassword, salt);
+
+    await pool.request()
+      .input('password_hash', sql.VarChar, hashedPassword)
+      .input('id', sql.Int, userId)
+      .query(`UPDATE tickets.users SET password_hash = @password_hash, reset_token = NULL, reset_token_expires = NULL WHERE id = @id`);
+
+    return true;
   }
 }
 

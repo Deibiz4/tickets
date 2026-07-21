@@ -1,13 +1,13 @@
 node_modules
 npm-debug.log
 build
+dist
 .dockerignore
 .git
 .gitignore
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode
@@ -17,3 +17,7 @@ build
 *.njsproj
 *.sln
 *.sw?
+
+# Tests
+coverage
+.nyc_output

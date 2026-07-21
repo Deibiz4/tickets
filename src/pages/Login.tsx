@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
-import { API_BASE_URL } from '@/config/api';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -13,20 +13,8 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { login, loginWithToken } = useAuth();
-  const [searchParams] = useSearchParams();
-
-  useEffect(() => {
-    // Check for token in URL (from OAuth redirect)
-    const token = searchParams.get('token');
-    if (token) {
-      setIsLoading(true);
-      loginWithToken(token).catch(err => {
-        setError('Error al iniciar sesión con Microsoft (Token inválido)');
-        setIsLoading(false);
-      });
-    }
-  }, [searchParams, loginWithToken]);
+  const { login } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +30,6 @@ export function Login() {
       setIsLoading(false);
     }
   };
-
-  const handleMicrosoftLogin = () => {
-    window.location.href = `${API_BASE_URL}/auth/microsoft`;
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
       <div className="mb-8">
@@ -78,38 +61,32 @@ export function Login() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Contraseña</Label>
-                <a href="#" className="text-sm text-blue-600 hover:underline">
+                <Link to="/forgot-password" className="text-sm text-blue-600 hover:underline">
                   ¿Olvidaste tu contraseña?
-                </a>
+                </Link>
               </div>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
-            </Button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground bg-white">
-                  O continúa con
-                </span>
-              </div>
-            </div>
-
-            <Button variant="outline" type="button" className="w-full" onClick={handleMicrosoftLogin}>
-              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="microsoft" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M0 32h214.6v214.6H0V32zm233.4 0H448v214.6H233.4V32zM0 265.4h214.6V480H0V265.4zm233.4 0H448V480H233.4V265.4z"></path></svg>
-              Microsoft 365
             </Button>
 
             <div className="text-center text-sm">

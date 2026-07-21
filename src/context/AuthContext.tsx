@@ -9,6 +9,7 @@ interface User {
   username: string;
   fullName: string;
   role: string;
+  isSuperAdmin: boolean;
 }
 
 interface AuthContextType {
@@ -17,7 +18,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -63,28 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, []);
 
-  const loginWithToken = async (token: string) => {
-    localStorage.setItem('token', token);
-    try {
-      const response = await fetch(API_ENDPOINTS.AUTH.PROFILE, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
 
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        navigate('/dashboard');
-      } else {
-        throw new Error('Token inválido');
-      }
-    } catch (error) {
-      console.error('Error logging in with token:', error);
-      localStorage.removeItem('token');
-      throw error;
-    }
-  };
 
   const login = async (email: string, password: string) => {
     try {
@@ -135,7 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     isLoading,
     login,
-    loginWithToken,
     logout,
   };
 

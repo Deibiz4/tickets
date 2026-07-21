@@ -6,7 +6,6 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "migrate": "node-pg-migrate",
     "test": "jest"
   },
   "dependencies": {
@@ -19,12 +18,12 @@
     "http-status-codes": "^2.2.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "mssql": "^10.0.1",
     "multer": "^1.4.5-lts.1",
-    "node-pg-migrate": "^6.2.2",
     "nodemailer": "^6.10.1",
     "passport": "^0.7.0",
     "passport-microsoft": "^2.1.0",
-    "pg": "^8.11.3",
+    "node-cron": "^3.0.3",
     "uuid": "^9.0.1",
     "winston": "^3.11.0"
   },

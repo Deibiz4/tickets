@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { API_ENDPOINTS } from '@/config/api';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
 
 interface Ticket {
   id: number;
@@ -30,7 +30,7 @@ export function TicketList() {
 
   // Filter States
   const [priorityFilter, setPriorityFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
 
@@ -67,7 +67,7 @@ export function TicketList() {
         if (searchQuery) query.append('search', searchQuery);
         if (priorityFilter) query.append('priority', priorityFilter);
         if (statusFilter) query.append('status', statusFilter);
-        if (departmentFilter) query.append('department', departmentFilter);
+        if (departmentFilter) query.append('departmentId', departmentFilter);
         if (sortConfig) {
           query.append('sortBy', sortConfig.key);
           query.append('sortOrder', sortConfig.direction === 'asc' ? 'ASC' : 'DESC');
@@ -214,6 +214,7 @@ export function TicketList() {
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="">Todos</option>
+            <option value="active">Activos</option>
             <option value="open">Abierto</option>
             <option value="in_progress">En Progreso</option>
             <option value="waiting">En Espera</option>
@@ -230,7 +231,7 @@ export function TicketList() {
             >
               <option value="">Todos</option>
               {departments.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
+                <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
           </div>

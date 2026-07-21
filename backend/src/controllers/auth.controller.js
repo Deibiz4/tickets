@@ -1,16 +1,18 @@
 const User = require('../models/user.model');
 const { BadRequestError } = require('../middleware/errorHandler');
+const { sendPasswordResetEmail } = require('../services/email.service');
 
 const authController = {
   // Registrar un nuevo usuario
   async register(req, res, next) {
     try {
-      const { username, email, password, fullName, department, phone } = req.body;
+      const { username, email, password, fullName, department: departmentName, phone } = req.body;
 
-      // Validar campos requeridos
-      if (!username || !email || !password || !fullName || !department) {
-        throw new BadRequestError('Todos los campos son obligatorios');
-      }
+      // Get department ID from name if needed, but User.create expects departmentId
+      // For now, let's just find the department or default to null
+      const Department = require('../models/department.model');
+      const dept = await Department.findByName(departmentName);
+      const departmentId = dept ? dept.id : null;
 
       // Crear el usuario
       const user = await User.create({
@@ -18,7 +20,7 @@ const authController = {
         email,
         password,
         fullName,
-        department,
+        departmentId,
         phone,
       });
 
@@ -37,6 +39,7 @@ const authController = {
           department: user.department,
           phone: user.phone_number,
           role: user.role,
+          isSuperAdmin: user.is_super_admin,
           createdAt: user.created_at,
         },
       });
@@ -71,6 +74,7 @@ const authController = {
           email: user.email,
           fullName: user.full_name,
           role: user.role,
+          isSuperAdmin: user.is_super_admin,
           createdAt: user.created_at,
         },
       });
@@ -94,9 +98,44 @@ const authController = {
           email: user.email,
           fullName: user.full_name,
           role: user.role,
+          isSuperAdmin: user.is_super_admin,
           createdAt: user.created_at,
         }
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async forgotPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ msg: 'El correo es obligatorio' });
+
+      const plainToken = await User.setResetToken(email);
+
+      // Siempre responder igual para no revelar si el email existe
+      if (plainToken) {
+        const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${plainToken}`;
+        await sendPasswordResetEmail(email, resetUrl);
+      }
+
+      res.json({ msg: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña.' });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async resetPassword(req, res, next) {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) return res.status(400).json({ msg: 'Token y contraseña son obligatorios' });
+      if (password.length < 6) return res.status(400).json({ msg: 'La contraseña debe tener al menos 6 caracteres' });
+
+      const ok = await User.resetPasswordByToken(token, password);
+      if (!ok) return res.status(400).json({ msg: 'El enlace no es válido o ha expirado' });
+
+      res.json({ msg: 'Contraseña actualizada correctamente' });
     } catch (error) {
       next(error);
     }

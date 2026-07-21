@@ -6,13 +6,14 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const { createServer } = require('http');
 const { errorHandler } = require('./middleware/errorHandler');
-const { connectDB } = require('./config/db');
+const { poolPromise } = require('./config/db');
 const logger = require('./utils/logger');
 
 // Importar rutas
 const authRoutes = require('./routes/auth');
 const ticketRoutes = require('./routes/tickets');
 const userRoutes = require('./routes/users');
+const { initSchedulers } = require('./scheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,9 +51,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Passport Config
-const passport = require('./config/passport');
-app.use(passport.initialize());
+
 
 // Logging en desarrollo
 if (process.env.NODE_ENV !== 'production') {
@@ -67,6 +66,7 @@ app.use('/api/departments', require('./routes/departments'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/kb', require('./routes/kb'));
+app.use('/api/admin', require('./routes/admin'));
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Content-Disposition', 'attachment');
   next();
@@ -86,7 +86,11 @@ const server = createServer(app);
 const startServer = async () => {
   try {
     // Conectar a la base de datos
-    await connectDB();
+    await poolPromise;
+    console.log('Database connected successfully');
+
+    // Inicializar tareas programadas
+    initSchedulers();
 
     server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
